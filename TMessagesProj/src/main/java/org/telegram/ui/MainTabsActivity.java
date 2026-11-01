@@ -330,6 +330,11 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 }
             }
         });
+        // A very subtle tint: the bar itself is already glass, the lens only has to
+        // separate the selected tab from the rest of it.
+        tabsView.setLensColors(
+                Theme.multAlpha(getThemedColor(Theme.key_glass_defaultIcon), 24 / 255f),
+                Theme.multAlpha(getThemedColor(Theme.key_glass_defaultIcon), 32 / 255f));
         restoreTabOrder();
         selectTab(viewPager.getCurrentPosition(), false);
         checkUnreadDialogsTabVisibility(false);
@@ -762,6 +767,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             GlassTabView tab = tabs[a];
             tab.setSelected(indexToPosition(a) == position, animated);
         }
+        updateTabsLens(position);
     }
 
     public void setGestureSelectedOverride(float animatedPosition, boolean allow) {
@@ -770,7 +776,34 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             final float visibility = Math.max(0, 1f - Math.abs(position - animatedPosition));
             tabs[index].setGestureSelectedOverride(visibility, allow);
         }
+        updateTabsLens(animatedPosition);
         tabsView.invalidate();
+    }
+
+    /** Drives the floating glass lens from the continuous page position. */
+    private void updateTabsLens(float animatedPosition) {
+        if (tabsView == null || tabs == null) {
+            return;
+        }
+
+        final int lo = (int) Math.floor(animatedPosition);
+        final float fraction = animatedPosition - lo;
+        int fromIndex = -1;
+        int toIndex = -1;
+        for (int a = 0; a < tabs.length; a++) {
+            final int position = indexToPosition(a);
+            if (position == lo) fromIndex = a;
+            if (position == lo + 1) toIndex = a;
+        }
+
+        if (fromIndex < 0 && toIndex < 0) {
+            tabsView.setLensTarget(-1, -1, 0);
+            return;
+        }
+
+        if (fromIndex < 0) fromIndex = toIndex;
+        if (toIndex < 0) toIndex = fromIndex;
+        tabsView.setLensTarget(fromIndex, toIndex, fromIndex == toIndex ? 0 : fraction);
     }
 
 

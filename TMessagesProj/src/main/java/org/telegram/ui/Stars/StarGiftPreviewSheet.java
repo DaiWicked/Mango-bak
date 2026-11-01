@@ -973,10 +973,10 @@ public class StarGiftPreviewSheet extends BottomSheetWithRecyclerListView {
 
             setLensBounds((int) left, dp(8), (int) right, getMeasuredHeight() - dp(8));
 
-            int a = MathUtils.clamp((int) ((1f - Math.abs(start - 1f)) * 255), 0, 255);
-
-//            setLensVisibility(a);
-
+            // The lens is always fully opaque: the previous expression faded it out
+            // whenever the selector rested on the first or the last tab, which made
+            // the effect disappear for two out of three tabs.
+            setLensVisibility(1f);
         }
 
         @Override

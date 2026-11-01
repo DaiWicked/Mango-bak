@@ -1,0 +1,68 @@
+name: Android CI
+
+on:
+  push:
+    branches: ['main', 'master', 'feat/**', 'fix/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Mango center cross-reference audit
+        run: python3 Tools/tests/check_mango_center.py
+      - name: Main tabs customization tests
+        run: python3 Tools/tests/run_main_tabs_customization_tests.py
+
+  build:
+    name: Build afatRelease APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;21.4.7075529" "cmake;3.10.2"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'build.gradle', 'TMessagesProj/build.gradle', 'TMessagesProj_App/build.gradle', 'gradle.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Build afatRelease APK
+        run: ./gradlew :TMessagesProj_App:assembleAfatRelease --console=plain --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mango-afatRelease-apk
+          path: TMessagesProj_App/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14

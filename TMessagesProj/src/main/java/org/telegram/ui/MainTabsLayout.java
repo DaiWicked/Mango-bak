@@ -4,14 +4,19 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.RecordingCanvas;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 
+import androidx.annotation.NonNull;
+
 import java.util.ArrayList;
 
 import org.telegram.ui.Components.AnimatedLinearLayout;
+import org.telegram.ui.Components.glass.GlassLens;
 import org.telegram.ui.Components.glass.GlassTabView;
 
 import me.vkryl.android.animator.ListAnimator;
@@ -31,6 +36,80 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     private boolean childTouchCancelled;
     private float touchX, startX, draggedOffsetX;
     private int pointerId = -1;
+
+    /**
+     * The floating lens that follows the selected tab. It refracts a snapshot of the
+     * tab bar drawn underneath it, which is what makes the selection look like a piece
+     * of glass sliding between the tabs instead of a flat highlight.
+     */
+    private GlassLens lens;
+    private int lensColorBackground;
+    private int lensColorForeground;
+    private int lensFromIndex = -1;
+    private int lensToIndex = -1;
+    private float lensFraction;
+    private float lensVisibility;
+
+    public void setLensColors(int backgroundColor, int foregroundColor) {
+        lensColorBackground = backgroundColor;
+        lensColorForeground = foregroundColor;
+        if (lens != null) {
+            lens.setColor(backgroundColor, foregroundColor);
+        }
+    }
+
+    private GlassLens ensureLens() {
+        if (lens == null) {
+            lens = new GlassLens();
+            lens.setColor(lensColorBackground, lensColorForeground);
+        }
+        return lens;
+    }
+
+    /**
+     * Places the lens between two tabs.
+     *
+     * @param fromIndex  child index the lens is coming from, -1 to hide the lens
+     * @param toIndex    child index the lens is going to
+     * @param fraction   0..1 progress between {@code fromIndex} and {@code toIndex}
+     */
+    public void setLensTarget(int fromIndex, int toIndex, float fraction) {
+        lensFromIndex = fromIndex;
+        lensToIndex = toIndex;
+        lensFraction = fraction;
+        updateLensBounds();
+    }
+
+    private void updateLensBounds() {
+        final View from = lensFromIndex >= 0 && lensFromIndex < getChildCount() ? getChildAt(lensFromIndex) : null;
+        final View to = lensToIndex >= 0 && lensToIndex < getChildCount() ? getChildAt(lensToIndex) : null;
+
+        if (from == null && to == null || !isViewVisible(from != null ? from : to)) {
+            lensVisibility = 0;
+            if (lens != null) lens.setVisibility(0);
+            return;
+        }
+
+        final View start = from != null ? from : to;
+        final View end = to != null ? to : start;
+        // Animate both edges independently so the lens keeps a constant width while
+        // travelling between tabs instead of stretching across the whole bar.
+        final float f = start == end ? 0 : lensFraction;
+        final int left = Math.round(lerp(start.getLeft(), end.getLeft(), f));
+        final int right = Math.round(lerp(start.getRight(), end.getRight(), f));
+        final int top = Math.min(start.getTop(), end.getTop());
+        final int bottom = Math.max(start.getBottom(), end.getBottom());
+
+        if (right - left <= 0 || bottom - top <= 0) {
+            lensVisibility = 0;
+            if (lens != null) lens.setVisibility(0);
+            return;
+        }
+
+        lensVisibility = 1;
+        ensureLens().setBounds(left, top, right, bottom);
+        lens.setVisibility(1f);
+    }
 
     public void setReorderListener(ReorderListener listener) {
         reorderListener = listener;
@@ -420,6 +499,21 @@ public class MainTabsLayout extends AnimatedLinearLayout {
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
         checkVisualWidth();
+        updateLensBounds();
+    }
+
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (lens != null && lensVisibility > 0) {
+            final RecordingCanvas c = lens.beginRecord(getMeasuredWidth(), getMeasuredHeight(), getBackground());
+            if (c != null) {
+                super.dispatchDraw(c);
+                lens.endRecord();
+            }
+
+            lens.draw(canvas);
+        }
+        super.dispatchDraw(canvas);
     }
 
     @Override
