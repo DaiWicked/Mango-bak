@@ -41,15 +41,30 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # android-actions/setup-android@v3 cannot be used: it installs a default
+      # "tools" package that no longer exists in the SDK repository, so the step
+      # dies with "Failed to find package 'tools'". Locate (or bootstrap) the
+      # command line tools ourselves instead of relying on PATH.
       - name: Install Android SDK components
-        # Use the runner's preinstalled cmdline-tools directly. The
-        # android-actions/setup-android action fails on current runners because
-        # its default "tools" package no longer exists in the SDK repository.
         run: |
-          yes | sdkmanager --licenses > /dev/null
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;21.4.7075529" "cmake;3.10.2"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_HOME/ndk"
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT" -maxdepth 4 -type f -name sdkmanager 2>/dev/null | sort | tail -1 || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "No cmdline-tools on the runner, bootstrapping them."
+            curl -sSLo /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            rm -rf /tmp/cmdline-tools && unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+            mkdir -p "$SDK_ROOT/cmdline-tools/latest"
+            cp -r /tmp/cmdline-tools/cmdline-tools/. "$SDK_ROOT/cmdline-tools/latest/"
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "SDK_ROOT=$SDK_ROOT"
+          echo "SDKMANAGER=$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;21.4.7075529" "cmake;3.10.2"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          ls "$SDK_ROOT/ndk"
 
       - uses: actions/cache@v4
         with:
