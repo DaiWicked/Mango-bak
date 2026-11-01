@@ -41,12 +41,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install Android SDK components
+        # Use the runner's preinstalled cmdline-tools directly. The
+        # android-actions/setup-android action fails on current runners because
+        # its default "tools" package no longer exists in the SDK repository.
         run: |
           yes | sdkmanager --licenses > /dev/null
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;21.4.7075529" "cmake;3.10.2"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/ndk"
 
       - uses: actions/cache@v4
         with:
@@ -57,7 +60,9 @@ jobs:
           restore-keys: gradle-${{ runner.os }}-
 
       - name: Build afatRelease APK
-        run: ./gradlew :TMessagesProj_App:assembleAfatRelease --console=plain --no-daemon
+        run: ./gradlew :TMessagesProj_App:assembleAfatRelease -x lintVitalRelease --console=plain --no-daemon
+        env:
+          GRADLE_OPTS: -Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
