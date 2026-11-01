@@ -76,6 +76,11 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'build.gradle', 'TMessagesProj/build.gradle', 'TMessagesProj_App/build.gradle', 'gradle.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
+      - name: Make the wrapper executable
+        # gradlew is committed as 100644 in this repository, so the checkout has
+        # no execute bit and ./gradlew fails with "Permission denied" on Linux.
+        run: chmod +x gradlew
+
       - name: Build afatRelease APK
         run: ./gradlew :TMessagesProj_App:assembleAfatRelease -x lintVitalRelease --console=plain --no-daemon
         env:
